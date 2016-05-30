@@ -57,6 +57,7 @@
 			// treeView
 			// 
 			this.treeView.Dock = System.Windows.Forms.DockStyle.Fill;
+			this.treeView.LabelEdit = true;
 			this.treeView.Location = new System.Drawing.Point(3, 3);
 			this.treeView.Name = "treeView";
 			this.tableLayoutPanel.SetRowSpan(this.treeView, 2);
