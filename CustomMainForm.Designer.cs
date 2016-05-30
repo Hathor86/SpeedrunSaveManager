@@ -32,6 +32,7 @@
 			this.tableLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
 			this.treeView = new System.Windows.Forms.TreeView();
 			this.pictureBox1 = new System.Windows.Forms.PictureBox();
+			this.nodeStatusLabel = new System.Windows.Forms.Label();
 			this.tableLayoutPanel.SuspendLayout();
 			((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
 			this.SuspendLayout();
@@ -43,6 +44,7 @@
 			this.tableLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
 			this.tableLayoutPanel.Controls.Add(this.treeView, 0, 0);
 			this.tableLayoutPanel.Controls.Add(this.pictureBox1, 1, 0);
+			this.tableLayoutPanel.Controls.Add(this.nodeStatusLabel, 1, 1);
 			this.tableLayoutPanel.Dock = System.Windows.Forms.DockStyle.Fill;
 			this.tableLayoutPanel.Location = new System.Drawing.Point(0, 0);
 			this.tableLayoutPanel.Name = "tableLayoutPanel";
@@ -71,6 +73,14 @@
 			this.pictureBox1.TabIndex = 1;
 			this.pictureBox1.TabStop = false;
 			// 
+			// nodeStatusLabel
+			// 
+			this.nodeStatusLabel.AutoSize = true;
+			this.nodeStatusLabel.Location = new System.Drawing.Point(231, 180);
+			this.nodeStatusLabel.Name = "nodeStatusLabel";
+			this.nodeStatusLabel.Size = new System.Drawing.Size(0, 13);
+			this.nodeStatusLabel.TabIndex = 2;
+			// 
 			// CustomMainForm
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -81,6 +91,7 @@
 			this.Name = "CustomMainForm";
 			this.Text = "Speedrun Save Manager";
 			this.tableLayoutPanel.ResumeLayout(false);
+			this.tableLayoutPanel.PerformLayout();
 			((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
 			this.ResumeLayout(false);
 
@@ -91,5 +102,6 @@
 		private System.Windows.Forms.TableLayoutPanel tableLayoutPanel;
 		private System.Windows.Forms.TreeView treeView;
 		private System.Windows.Forms.PictureBox pictureBox1;
+		private System.Windows.Forms.Label nodeStatusLabel;
 	}
 }

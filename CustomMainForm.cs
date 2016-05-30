@@ -5,45 +5,54 @@ using System.Data;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Windows.Forms;
 using BizHawk.Client.ApiHawk;
 using BizHawk.Client.ApiHawk.Classes.Events;
 using BizHawk.Client.Common;
+using SpeedrunSaveManager;
 
 namespace BizHawk.Client.EmuHawk
 {
 	public partial class CustomMainForm : Form, IExternalToolForm
 	{
 		#region Fields
+
+		private EventHandler romLoadEventHandler;
+		private BeforeQuickSaveEventHandler beforeQuickSaveEventHandler;
+		private BeforeQuickLoadEventHandler beforeQuickLoadEventHandler;
+
 		#endregion
 
 		public CustomMainForm()
 		{
 			InitializeComponent();
-			romload(null, null);			
+
+			romLoadEventHandler = new EventHandler(RomLoad);
+			beforeQuickSaveEventHandler = new BeforeQuickSaveEventHandler(BeforeQuickSave);
+			beforeQuickLoadEventHandler = new BeforeQuickLoadEventHandler(BeforeQuickLoad);
+
+			RomLoad(null, null);
 
 			treeView.NodeMouseClick += new TreeNodeMouseClickEventHandler(TreeNode_Click);
-			treeView.NodeMouseHover += new TreeNodeMouseHoverEventHandler(TreeNode_MouseHover);			
+			treeView.NodeMouseHover += new TreeNodeMouseHoverEventHandler(TreeNode_MouseHover);
 
-			ClientApi.RomLoaded += new EventHandler(romload);
-			ClientApi.BeforeQuickSave += new BeforeQuickSaveEventHandler(BeforeQuickSave);
+			ClientApi.RomLoaded += romLoadEventHandler;
+			ClientApi.BeforeQuickSave += beforeQuickSaveEventHandler;
+			ClientApi.BeforeQuickLoad += beforeQuickLoadEventHandler;
 		}		
 
-		public void romload(object sender, EventArgs e)
+		public void RomLoad(object sender, EventArgs e)
 		{
-			string basePath;
+			string basePath = Global.Game.Name.AsSafePathName();
 
 			treeView.Nodes.Clear();
 
-			TreeNode main = new TreeNode(Global.Game.Name);
+			TreeNode main = new TreeNode(basePath);
 			treeView.Nodes.Add(main);
-			/*basePath = Global.Game.Name;
-			foreach(char c in Path.GetInvalidPathChars())
-			{
-				basePath = basePath.Replace(c, '_');
-			}*/
-			basePath = Path.Combine(PathManager.GetSaveStatePath(Global.Game), Global.Game.Name);
+
+			basePath = Path.Combine(PathManager.GetSaveStatePath(Global.Game), basePath);
 
 			if (!Directory.Exists(basePath))
 			{
@@ -82,35 +91,56 @@ namespace BizHawk.Client.EmuHawk
 			}
 		}
 
+		private void BeforeQuickLoad(object sender, BeforeQuickLoadEventArgs e)
+		{
+			string path;
+			if (treeView.SelectedNode.Nodes.Count == 0 && treeView.SelectedNode.Parent != null)
+			{
+				treeView.SelectedNode = treeView.SelectedNode.Parent;
+			}
+			path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
+			try
+			{
+				ClientApi.LoadState(Path.Combine(path, e.Name));
+			}
+			catch (TargetInvocationException)
+			{}
+			e.Handled = true;
+		}
+
 		private void BeforeQuickSave(object sender, BeforeQuickSaveEventArgs e)
 		{
 			string path;
-			if(treeView.SelectedNode.Nodes.Count == 0)
-			{
-				path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
-			}
-			else
+			if (treeView.SelectedNode.Nodes.Count == 0 && treeView.SelectedNode.Parent != null)
 			{
 				treeView.SelectedNode = treeView.SelectedNode.Parent;
-				path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.Parent.FullPath);
 			}
+			path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
 			ClientApi.SaveState(Path.Combine(path, e.Name));
 			e.Handled = true;
 
-			//treeView.SelectedNode.Nodes.Add(new TreeNode(e.Name));
+			treeView.SelectedNode.Nodes.Add(new TreeNode(e.Name));
 		}
 
 		private void TreeNode_Click(object sender, TreeNodeMouseClickEventArgs e)
 		{
-			if (treeView.SelectedNode.Nodes.Count == 0)
+			treeView.SelectedNode = e.Node;
+			if (treeView.SelectedNode.Nodes.Count == 0 && treeView.SelectedNode.Parent != null)
 			{
-				ClientApi.LoadState(Path.Combine(PathManager.GetSaveStatePath(Global.Game), e.Node.FullPath));
+				try
+				{
+					ClientApi.LoadState(Path.Combine(PathManager.GetSaveStatePath(Global.Game), e.Node.FullPath));
+					treeView.SelectedNode = treeView.SelectedNode.Parent;
+				}
+				catch (TargetInvocationException)
+				{}
 			}
+			nodeStatusLabel.Text = string.Format("Current folder: {0}", treeView.SelectedNode.Text);
 		}
 
 		private void TreeNode_MouseHover(object sender, TreeNodeMouseHoverEventArgs e)
 		{
-			if (treeView.SelectedNode.Nodes.Count == 0)
+			if (e.Node.Nodes.Count == 0)
 			{
 				BinaryStateLoader.LoadAndDetect(Path.Combine(PathManager.GetSaveStatePath(Global.Game), string.Format("{0}.State", e.Node.FullPath))).GetLump(BinaryStateLump.Framebuffer, false, PopulatePictureBox);
 			}
@@ -120,7 +150,8 @@ namespace BizHawk.Client.EmuHawk
 		{
 			base.OnClosed(e);
 
-			ClientApi.BeforeQuickSave -= BeforeQuickSave;
+			ClientApi.BeforeQuickSave -= beforeQuickSaveEventHandler;
+			ClientApi.BeforeQuickLoad -= beforeQuickLoadEventHandler;
 		}
 
 		#region Bizhawk required stuff

@@ -69,7 +69,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
+    <Compile Include="StringExtension.cs" />
     <Compile Include="CustomMainForm.cs">
       <SubType>Form</SubType>
     </Compile>
