@@ -1,16 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Windows.Forms;
+
 using BizHawk.Client.ApiHawk;
 using BizHawk.Client.ApiHawk.Classes.Events;
 using BizHawk.Client.Common;
+
 using SpeedrunSaveManager;
 
 namespace BizHawk.Client.EmuHawk
@@ -34,7 +32,15 @@ namespace BizHawk.Client.EmuHawk
 			rename.ShortcutKeys = Keys.F2;
 			rename.ShowShortcutKeys = true;
 
-			menu.Items.Add(rename);
+			ToolStripMenuItem newDirectory = new ToolStripMenuItem("New directory", null, new EventHandler(MenuItem_Click));
+
+			ToolStripMenuItem delete = new ToolStripMenuItem("Delete", null, new EventHandler(MenuItem_Click));
+			delete.ShortcutKeys = Keys.Delete;
+			delete.ShowShortcutKeys = true;
+			delete.Enabled = false;
+
+			menu.Items.AddRange(new ToolStripItem[] { rename, newDirectory, delete });
+			menu.Opening += new CancelEventHandler(Menu_Opening);
 
 			romLoadEventHandler = new EventHandler(RomLoad);
 			beforeQuickSaveEventHandler = new BeforeQuickSaveEventHandler(BeforeQuickSave);
@@ -51,6 +57,37 @@ namespace BizHawk.Client.EmuHawk
 			ClientApi.BeforeQuickLoad += beforeQuickLoadEventHandler;
 		}
 
+		private void DeleteNode()
+		{
+			bool shouldDelete = false;
+			if(treeView.SelectedNode.Tag is DirectoryInfo)
+			{
+				DirectoryInfo di = (DirectoryInfo)treeView.SelectedNode.Tag;
+				if(MessageBox.Show(string.Format("Remove directory {0} and all of its content ?", di.Name), "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+				{
+					di.Delete(true);
+					shouldDelete = true;
+				}
+				
+			}
+			else
+			{
+				FileInfo fi = (FileInfo)treeView.SelectedNode.Tag;
+				if (MessageBox.Show(string.Format("Remove state {0} ?", fi.Name), "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+				{
+					fi.Delete();
+					shouldDelete = true;
+				}
+			}
+
+			if(shouldDelete)
+			{
+				TreeNode node = treeView.SelectedNode;
+				treeView.SelectedNode = treeView.SelectedNode.Parent;
+				treeView.SelectedNode.Nodes.Remove(node);
+			}
+		}
+
 		private void PopulatePictureBox(BinaryReader reader)
 		{
 			pictureBox1.Image = new Bitmap(reader.BaseStream);
@@ -65,18 +102,13 @@ namespace BizHawk.Client.EmuHawk
 				child.Tag = di;
 				node.Nodes.Add(child);
 
-				if (di.GetDirectories().Any())
+				PopulateTreeView(di.FullName, child);
+
+				foreach (FileInfo savestate in di.GetFiles("*.State"))
 				{
-					PopulateTreeView(di.FullName, child);
-				}
-				else
-				{
-					foreach (FileInfo savestate in di.GetFiles("*.State"))
-					{
-						TreeNode lastNode = new TreeNode(savestate.Name.Replace(".State", string.Empty));
-						lastNode.Tag = savestate;
-						child.Nodes.Add(lastNode);
-					}
+					TreeNode lastNode = new TreeNode(savestate.Name.Replace(".State", string.Empty));
+					lastNode.Tag = savestate;
+					child.Nodes.Add(lastNode);
 				}
 			}
 		}
@@ -117,16 +149,47 @@ namespace BizHawk.Client.EmuHawk
 					return;
 				}
 			}
-			
+
 			treeView.SelectedNode.Nodes.Add(new TreeNode(e.Name));
-			treeView.SelectedNode.ExpandAll();
+			treeView.Sort();
+			if (treeView.SelectedNode != null)
+			{
+				treeView.SelectedNode.ExpandAll();
+			}
 		}
 
 		private void MenuItem_Click(object sender, EventArgs e)
 		{
-			if (((ToolStripMenuItem)sender).Text == "Rename")
+			switch (((ToolStripMenuItem)sender).Text)
 			{
-				treeView.SelectedNode.BeginEdit();
+				case "Rename":
+					treeView.SelectedNode.BeginEdit();
+					break;
+
+				case "New directory":
+					TreeNode newNode = new TreeNode("new");
+					treeView.SelectedNode.Nodes.Add(newNode);
+					newNode.BeginEdit();
+					break;
+
+				case "Delete":
+					DeleteNode();
+					break;
+
+				default:
+					break;
+			}
+		}
+
+		private void Menu_Opening(object sender, CancelEventArgs e)
+		{
+			if (treeView.SelectedNode.Tag is FileInfo)
+			{
+				menu.Items[1].Enabled = false;
+			}
+			else
+			{
+				menu.Items[1].Enabled = true;
 			}
 		}
 
@@ -155,39 +218,66 @@ namespace BizHawk.Client.EmuHawk
 		}
 
 		private void TreeView_AfterLabelEdit(object sender, NodeLabelEditEventArgs e)
-		{
-			if (e.Label.IndexOfAny(Path.GetInvalidPathChars()) > 0)
+		{			
+			if (e.Label != null && e.Label.IndexOfAny(Path.GetInvalidPathChars()) > 0)
 			{
 				e.CancelEdit = true;
 			}
 			else
 			{
-				DirectoryInfo di = e.Node.Tag as DirectoryInfo;
-				if (di == null)
+				if (e.Node.Tag == null) //New node
 				{
-					FileInfo fi = (FileInfo)e.Node.Tag;
-					string path = Path.Combine(fi.DirectoryName, string.Format("{0}.State", e.Label));
-					if (!File.Exists(path))
+					DirectoryInfo di = (DirectoryInfo)e.Node.Parent.Tag;
+					string path = Path.Combine(di.FullName, e.Label);
+					if (!Directory.Exists(path))
 					{
-						fi.MoveTo(path);
+						Directory.CreateDirectory(path);
+						DirectoryInfo newDirectory = new DirectoryInfo(path);
+						e.Node.Tag = newDirectory;
 					}
 					else
 					{
+						MessageBox.Show(string.Format("Directory {0} already exists.", e.Label), "Nope", MessageBoxButtons.OK, MessageBoxIcon.Information);
 						e.CancelEdit = true;
-						MessageBox.Show(string.Format("File {0} already exists.", e.Label), "Nope", MessageBoxButtons.OK, MessageBoxIcon.Information);
+						e.Node.Parent.Nodes.Remove(e.Node);
 					}
 				}
 				else
 				{
-					string path = Path.Combine(di.Parent.FullName, e.Label);
-					if (!Directory.Exists(path))
+					DirectoryInfo di = e.Node.Tag as DirectoryInfo;
+					if (di == null) //So, it's a final node, savestate
 					{
-						//di.MoveTo(path);
+						FileInfo fi = (FileInfo)e.Node.Tag;
+						string path = Path.Combine(fi.DirectoryName, string.Format("{0}.State", e.Label));
+						if (!File.Exists(path))
+						{
+							fi.MoveTo(path);
+						}
+						else
+						{
+							e.CancelEdit = true;
+							MessageBox.Show(string.Format("File {0} already exists.", e.Label), "Nope", MessageBoxButtons.OK, MessageBoxIcon.Information);
+						}
 					}
 					else
 					{
-						e.CancelEdit = true;
-						MessageBox.Show(string.Format("Directory {0} already exists.", e.Label), "Nope", MessageBoxButtons.OK, MessageBoxIcon.Information);
+						string path = Path.Combine(di.Parent.FullName, e.Label);
+						if (!Directory.Exists(path))
+						{
+							try
+							{
+								di.MoveTo(path);
+							}
+							catch (IOException ex)
+							{
+								MessageBox.Show(ex.Message);
+							}
+						}
+						else
+						{
+							e.CancelEdit = true;
+							MessageBox.Show(string.Format("Directory {0} already exists.", e.Label), "Nope", MessageBoxButtons.OK, MessageBoxIcon.Information);
+						}
 					}
 				}
 			}
