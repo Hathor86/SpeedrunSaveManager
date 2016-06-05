@@ -24,6 +24,8 @@ namespace BizHawk.Client.EmuHawk
 
 		#endregion
 
+		#region cTor(s)
+
 		public CustomMainForm()
 		{
 			InitializeComponent();
@@ -57,18 +59,23 @@ namespace BizHawk.Client.EmuHawk
 			ClientApi.BeforeQuickLoad += beforeQuickLoadEventHandler;
 		}
 
+		#endregion
+
+
+		#region Methods
+
 		private void DeleteNode()
 		{
 			bool shouldDelete = false;
-			if(treeView.SelectedNode.Tag is DirectoryInfo)
+			if (treeView.SelectedNode.Tag is DirectoryInfo)
 			{
 				DirectoryInfo di = (DirectoryInfo)treeView.SelectedNode.Tag;
-				if(MessageBox.Show(string.Format("Remove directory {0} and all of its content ?", di.Name), "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+				if (MessageBox.Show(string.Format("Remove directory {0} and all of its content ?", di.Name), "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
 				{
 					di.Delete(true);
 					shouldDelete = true;
 				}
-				
+
 			}
 			else
 			{
@@ -80,7 +87,7 @@ namespace BizHawk.Client.EmuHawk
 				}
 			}
 
-			if(shouldDelete)
+			if (shouldDelete)
 			{
 				TreeNode node = treeView.SelectedNode;
 				treeView.SelectedNode = treeView.SelectedNode.Parent;
@@ -113,32 +120,55 @@ namespace BizHawk.Client.EmuHawk
 			}
 		}
 
+		protected override void OnClosed(EventArgs e)
+		{
+			base.OnClosed(e);
+
+			ClientApi.BeforeQuickSave -= beforeQuickSaveEventHandler;
+			ClientApi.BeforeQuickLoad -= beforeQuickLoadEventHandler;
+		}
+
+		#region Event Handlers
+
 		private void BeforeQuickLoad(object sender, BeforeQuickLoadEventArgs e)
 		{
-			string path;
 			if (treeView.SelectedNode.Tag is FileInfo)
 			{
 				treeView.SelectedNode = treeView.SelectedNode.Parent;
 			}
-			path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
-			try
+
+			string path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
+			if (File.Exists(path))
 			{
-				ClientApi.LoadState(Path.Combine(path, e.Name));
+				try
+				{
+					ClientApi.LoadState(Path.Combine(path, e.Name));
+				}
+#if DEBUG
+				catch (TargetInvocationException ex)
+				{
+					MessageBox.Show(ex.Message);
+				}
+#else
+				catch (TargetInvocationException)
+				{}
+#endif
 			}
-			catch (TargetInvocationException)
-			{ }
 			e.Handled = true;
 		}
 
 		private void BeforeQuickSave(object sender, BeforeQuickSaveEventArgs e)
 		{
-			string path;
+			if (treeView.SelectedNode == null)
+			{
+				treeView.SelectedNode = treeView.Nodes[0];
+			}
 
 			if (treeView.SelectedNode.Tag is FileInfo)
 			{
 				treeView.SelectedNode = treeView.SelectedNode.Parent;
 			}
-			path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
+			string path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
 			ClientApi.SaveState(Path.Combine(path, e.Name));
 			e.Handled = true;
 
@@ -150,8 +180,9 @@ namespace BizHawk.Client.EmuHawk
 				}
 			}
 
-			treeView.SelectedNode.Nodes.Add(new TreeNode(e.Name));
-			treeView.Sort();
+			TreeNode newNode = new TreeNode(e.Name);
+			newNode.Tag = new FileInfo(Path.Combine(path, string.Format("{0}.State", e.Name)));
+			treeView.SelectedNode.Nodes.Add(newNode);
 			if (treeView.SelectedNode != null)
 			{
 				treeView.SelectedNode.ExpandAll();
@@ -169,6 +200,7 @@ namespace BizHawk.Client.EmuHawk
 				case "New directory":
 					TreeNode newNode = new TreeNode("new");
 					treeView.SelectedNode.Nodes.Add(newNode);
+					treeView.SelectedNode.Expand();
 					newNode.BeginEdit();
 					break;
 
@@ -196,6 +228,7 @@ namespace BizHawk.Client.EmuHawk
 		public void RomLoad(object sender, EventArgs e)
 		{
 			string basePath = Global.Game.Name.AsSafePathName();
+			DirectoryInfo rootDir;
 
 			TreeNode main = new TreeNode(basePath);
 
@@ -205,11 +238,18 @@ namespace BizHawk.Client.EmuHawk
 
 			if (!Directory.Exists(basePath))
 			{
-				Directory.CreateDirectory(basePath);
+				rootDir = Directory.CreateDirectory(basePath);
 			}
 			else
 			{
+				rootDir = new DirectoryInfo(basePath);
 				PopulateTreeView(basePath, main);
+				foreach (FileInfo savestate in rootDir.GetFiles("*.State"))
+				{
+					TreeNode lastNode = new TreeNode(savestate.Name.Replace(".State", string.Empty));
+					lastNode.Tag = savestate;
+					main.Nodes.Add(lastNode);
+				}
 			}
 			main.Tag = new DirectoryInfo(basePath);
 			treeView.Nodes.Add(main);
@@ -218,10 +258,16 @@ namespace BizHawk.Client.EmuHawk
 		}
 
 		private void TreeView_AfterLabelEdit(object sender, NodeLabelEditEventArgs e)
-		{			
+		{
+			if (e.Label == null || e.Label.Trim() == string.Empty)
+			{
+				e.CancelEdit = true;
+				return;
+			}
 			if (e.Label != null && e.Label.IndexOfAny(Path.GetInvalidPathChars()) > 0)
 			{
 				e.CancelEdit = true;
+				return;
 			}
 			else
 			{
@@ -316,13 +362,9 @@ namespace BizHawk.Client.EmuHawk
 			}
 		}
 
-		protected override void OnClosed(EventArgs e)
-		{
-			base.OnClosed(e);
+		#endregion Event Handlers
 
-			ClientApi.BeforeQuickSave -= beforeQuickSaveEventHandler;
-			ClientApi.BeforeQuickLoad -= beforeQuickLoadEventHandler;
-		}
+		#endregion
 
 		#region Bizhawk required stuff
 		public bool UpdateBefore
