@@ -137,12 +137,12 @@ namespace BizHawk.Client.EmuHawk
 				treeView.SelectedNode = treeView.SelectedNode.Parent;
 			}
 
-			string path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), treeView.SelectedNode.FullPath);
-			if (File.Exists(path))
+			string path = Path.Combine(PathManager.GetSaveStatePath(Global.Game), string.Format(@"{0}\{1}", treeView.SelectedNode.FullPath, e.Name));
+			if (File.Exists(string.Format("{0}.State", path)))
 			{
 				try
 				{
-					ClientApi.LoadState(Path.Combine(path, e.Name));
+					ClientApi.LoadState(path);
 				}
 #if DEBUG
 				catch (TargetInvocationException ex)
